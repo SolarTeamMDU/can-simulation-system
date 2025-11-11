@@ -21,7 +21,7 @@ An ESP32 based simulation of a Prohelion WaveSculptor motor controller for solar
 
 This project simulates a **Prohelion WaveSculptor motor controller** on an ESP32 microcontroller, providing motor control behavior for my university's solar car development. The simulator implements the complete WaveSculptor22 CAN protocol as it is written in their documentation with pretty okay motor physics, thermal modeling, and safety systems.
 
-### The goal with this project:**
+### The goal with this project:
 - **Protocol Testing**: Validate ECU communication without real motor controller. This is in consideration to the fact that our solar car is located in a different campus. 
 - **Development Environment**: Test control algorithms in a safe and more controlled environment. 
 - **Educational Tool**: Learn motor control principles and CAN bus communication. If anyone in the future joins our team and is still beginning to understand CAN, then it is a perfect tool for them.
@@ -78,7 +78,7 @@ VS Code with ESP-IDF extension
 
 ## Usage
 
-### Build and Flash**
+### Build and Flash
 ```bash
 # Build project
 idf.py build
@@ -95,7 +95,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 1. **Power On**: ESP32 boots and initializes CAN driver
 2. **CAN Communication**: Simulator begins transmitting periodic messages
 3. **Command Processing**: Responds to Drive, Power, and Reset commands
-4. **Real-time Simulation**: Updates motor physics at 100Hz (10ms intervals)
+4. **Real time Simulation**: Updates motor physics at 100Hz (10ms intervals)
 
 ### **CAN Bus Setup**
 
@@ -127,5 +127,5 @@ float max_allowed_current{100.0f};     // Current limit
 ## Acknowledgments
 
 - **Prohelion**: WaveSculptor motor controller documentation and protocols
-- **Espressif Systems**: ESP-IDF framework and excellent documentation
+- **Espressif Systems**: ESP-IDF framework
 ---
