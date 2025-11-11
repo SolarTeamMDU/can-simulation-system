@@ -5,7 +5,6 @@ An ESP32 based simulation of a Prohelion WaveSculptor motor controller for solar
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.4.3-blue.svg)](https://docs.espressif.com/projects/esp-idf/en/latest/)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-orange.svg)](https://en.cppreference.com/w/cpp/17)
 [![CAN Bus](https://img.shields.io/badge/CAN-Bus-green.svg)](https://en.wikipedia.org/wiki/CAN_bus)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 📋 Table of Contents
 
