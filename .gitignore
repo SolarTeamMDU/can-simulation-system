@@ -1,20 +1,21 @@
 # ESP-IDF Build Files
 build/
 sdkconfig.old
-.vscode/
 *.tmp
 
-# Doxygen Generated Files - EXCLUDE ALL GENERATED DOCS
+# Development Environment Files
+.vscode/
+.devcontainer/
+
+# Doxygen Files (Documentation Generation)
 docs/
 html/
 latex/
-Doxyfile.bak
+Doxyfile*
 *.tag
-
-# Keep only the configuration files
-!Doxyfile
-!Doxyfile.*
-!generate_docs.bat
+generate_docs.bat
+mainpage.hpp
+custom_light_theme.css
 
 # OS Generated Files
 .DS_Store
