@@ -7,7 +7,7 @@
 
 /// @file protocol.hpp
 /// @brief CAN protocol definitions for motor controller communication
-/// @note Low float first then high float and then MSB first within each float
+/// @note Low float first then high float. Protocol is LITTLE ENDIAN (LSB First).
 
 // ===========================================================
 // STATIC ASSERTS TO ENSURE PLATFORM COMPATIBILITY
@@ -348,38 +348,19 @@ struct ActiveMotorChangeCommand {
 // DESERIALIZATION IMPLEMENTATIONS (CAN frames -> Domain Structs)
 // ============================================================================
 
+// NOTE: We use memcpy here because the ESP32 is Little Endian and the WaveSculptor
+// protocol is Little Endian. This copies the bytes directly into the correct order.
+
 inline MotorDriveCommand::MotorDriveCommand(const CanFrame& frame) {
-	// Unpack motor_velocity_rpm (IEEE 754 32-bit float) from first 4 bytes - MSB first
-	uint32_t velocity_bits { 
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&motor_velocity_rpm, &velocity_bits, sizeof(float));
-
-	// Unpack motor_current_percent from remaining bytes (bytes 4-7 as another IEEE 754 float)
-	uint32_t current_bits { 
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&motor_current_percent, &current_bits, sizeof(float));
+    // Bytes 0-3: Velocity (Little Endian)
+    std::memcpy(&motor_velocity_rpm, &frame.data[0], sizeof(float));
+    // Bytes 4-7: Current (Little Endian)
+    std::memcpy(&motor_current_percent, &frame.data[4], sizeof(float));
 }
 
 inline MotorPowerCommand::MotorPowerCommand(const CanFrame& frame) {
-	// Unpack bus_current from bytes 4-7 (IEEE 754 float) - MSB first
-	uint32_t current_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&bus_current, &current_bits, sizeof(float));
+    // Bytes 4-7: Bus Current (Little Endian)
+    std::memcpy(&bus_current, &frame.data[4], sizeof(float));
 }
 
 inline ResetCommand::ResetCommand(const CanFrame& /*frame*/) {
@@ -387,745 +368,263 @@ inline ResetCommand::ResetCommand(const CanFrame& /*frame*/) {
 }
 
 inline IdentificationInformation::IdentificationInformation(const CanFrame& frame) {
-	// Unpack prohelion_ID from first 4 bytes - MSB first
-	prohelion_ID = 
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]));
-
-	// Unpack serial_number from next 4 bytes - MSB first
-	serial_number = 
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]));
+    // Bytes 0-3: Prohelion ID (Little Endian)
+    std::memcpy(&prohelion_ID, &frame.data[0], sizeof(uint32_t));
+    // Bytes 4-7: Serial Number (Little Endian)
+    std::memcpy(&serial_number, &frame.data[4], sizeof(uint32_t));
 }
 
 inline StatusInformation::StatusInformation(const CanFrame& frame) {
-	limit_flags = 
-		(static_cast<uint16_t>(frame.data[0]) << 8) |
-		(static_cast<uint16_t>(frame.data[1]));
-	
-	error_flags = 
-		(static_cast<uint16_t>(frame.data[2]) << 8) |
-		(static_cast<uint16_t>(frame.data[3]));
-	
-	active_motor = 
-		(static_cast<uint16_t>(frame.data[4]) << 8) |
-		(static_cast<uint16_t>(frame.data[5]));
-	
-	transmit_error_count = frame.data[6]; // Already uint_8 no need for cast
-
-	receive_error_count = frame.data[7]; // Already uint_8 no need for cast
+    // Bytes 0-1: Limit Flags (Little Endian)
+    std::memcpy(&limit_flags, &frame.data[0], sizeof(uint16_t));
+    // Bytes 2-3: Error Flags (Little Endian)
+    std::memcpy(&error_flags, &frame.data[2], sizeof(uint16_t));
+    // Bytes 4-5: Active Motor (Little Endian)
+    std::memcpy(&active_motor, &frame.data[4], sizeof(uint16_t));
+    
+    transmit_error_count = frame.data[6];
+    receive_error_count = frame.data[7];
 }
 
 inline BusMeasurement::BusMeasurement(const CanFrame& frame) {
-	// Unpack bus_voltage from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t voltage_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};	
-
-	std::memcpy(&bus_voltage, &voltage_bits, sizeof(float));
-
-	// Unpack bus_current from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t current_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&bus_current, &current_bits, sizeof(float));
+    std::memcpy(&bus_voltage, &frame.data[0], sizeof(float));
+    std::memcpy(&bus_current, &frame.data[4], sizeof(float));
 }
 
 inline VelocityMeasurement::VelocityMeasurement(const CanFrame& frame) {
-	// Unpack motor_velocity_rpm from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t rpm_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&motor_velocity_rpm, &rpm_bits, sizeof(float));
-
-	// Unpack vehicle_velocity from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t velocity_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&vehicle_velocity, &velocity_bits, sizeof(float));
+    std::memcpy(&motor_velocity_rpm, &frame.data[0], sizeof(float));
+    std::memcpy(&vehicle_velocity, &frame.data[4], sizeof(float));
 }
 
 inline PhaseCurrentMeasurement::PhaseCurrentMeasurement(const CanFrame& frame) {
-	// Unpack phase_b_current from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t phase_b_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&phase_b_current, &phase_b_bits, sizeof(float));
-
-	// Unpack phase_c_current from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t phase_c_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&phase_c_current, &phase_c_bits, sizeof(float));
+    std::memcpy(&phase_b_current, &frame.data[0], sizeof(float));
+    std::memcpy(&phase_c_current, &frame.data[4], sizeof(float));
 }
 
 inline MotorVoltageVectorMeasurement::MotorVoltageVectorMeasurement(const CanFrame& frame) {
-	// Unpack v_q from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t v_q_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&v_q, &v_q_bits, sizeof(float));
-
-	// Unpack v_d from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t v_d_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&v_d, &v_d_bits, sizeof(float));
+    std::memcpy(&v_q, &frame.data[0], sizeof(float));
+    std::memcpy(&v_d, &frame.data[4], sizeof(float));
 }
 
 inline MotorCurrentVectorMeasurement::MotorCurrentVectorMeasurement(const CanFrame& frame) {
-	// Unpack i_q from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t i_q_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&i_q, &i_q_bits, sizeof(float));
-
-	// Unpack i_d from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t i_d_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&i_d, &i_d_bits, sizeof(float));
+    std::memcpy(&i_q, &frame.data[0], sizeof(float));
+    std::memcpy(&i_d, &frame.data[4], sizeof(float));
 }
 
 inline MotorBackEMFMeasurement::MotorBackEMFMeasurement(const CanFrame& frame) {
-	// Unpack BEMf_q from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t BEMf_q_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&BEMf_q, &BEMf_q_bits, sizeof(float));
-
-	// Unpack BEMf_d from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t BEMf_d_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&BEMf_d, &BEMf_d_bits, sizeof(float));
+    std::memcpy(&BEMf_q, &frame.data[0], sizeof(float));
+    std::memcpy(&BEMf_d, &frame.data[4], sizeof(float));
 }
 
 inline VoltageRailMeasurement15V::VoltageRailMeasurement15V(const CanFrame& frame) {
-	// Unpack supply_of_15V from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t voltage_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&supply_of_15V, &voltage_bits, sizeof(float));
+    std::memcpy(&supply_of_15V, &frame.data[4], sizeof(float));
 }
 
 inline VoltageRailMeasurement3V3And1V9::VoltageRailMeasurement3V3And1V9(const CanFrame& frame) {
-	// Unpack supply_of_1V9 from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t voltage_1v9_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&supply_of_1V9, &voltage_1v9_bits, sizeof(float));
-
-	// Unpack supply_of_3V3 from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t voltage_3v3_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&supply_of_3V3, &voltage_3v3_bits, sizeof(float));
+    std::memcpy(&supply_of_1V9, &frame.data[0], sizeof(float));
+    std::memcpy(&supply_of_3V3, &frame.data[4], sizeof(float));
 }
 
 inline HeatsinkAndMotorTemperatureMeasurement::HeatsinkAndMotorTemperatureMeasurement(const CanFrame& frame) {
-	// Unpack motor_temp from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t motor_temp_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&motor_temp, &motor_temp_bits, sizeof(float));
-
-	// Unpack heat_sink_temp from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t heat_sink_temp_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&heat_sink_temp, &heat_sink_temp_bits, sizeof(float));
+    std::memcpy(&motor_temp, &frame.data[0], sizeof(float));
+    std::memcpy(&heat_sink_temp, &frame.data[4], sizeof(float));
 }
 
 inline DSPBoardTemperatureMeasurement::DSPBoardTemperatureMeasurement(const CanFrame& frame) {
-	// Unpack DSP_board_temp from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t dsp_temp_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&DSP_board_temp, &dsp_temp_bits, sizeof(float));
+    std::memcpy(&DSP_board_temp, &frame.data[0], sizeof(float));
 }
 
 inline OdometerAndBusAmpHoursMeasurement::OdometerAndBusAmpHoursMeasurement(const CanFrame& frame) {
-	// Unpack odometer from first 4 bytes (IEEE 754 float) - MSB first
-	uint32_t odometer_bits {
-		(static_cast<uint32_t>(frame.data[0]) << 24) |
-		(static_cast<uint32_t>(frame.data[1]) << 16) |
-		(static_cast<uint32_t>(frame.data[2]) << 8)  |
-		(static_cast<uint32_t>(frame.data[3]))
-	};
-
-	std::memcpy(&odometer, &odometer_bits, sizeof(float));
-
-	// Unpack DC_bus_amp_hours from next 4 bytes (IEEE 754 float) - MSB first
-	uint32_t amp_hours_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&DC_bus_amp_hours, &amp_hours_bits, sizeof(float));
+    std::memcpy(&odometer, &frame.data[0], sizeof(float));
+    std::memcpy(&DC_bus_amp_hours, &frame.data[4], sizeof(float));
 }
 
 inline SlipSpeedMeasurement::SlipSpeedMeasurement(const CanFrame& frame) {
-	// Unpack slip_speed from last 4 bytes (IEEE 754 float) - MSB first
-	uint32_t slip_speed_bits {
-		(static_cast<uint32_t>(frame.data[4]) << 24) |
-		(static_cast<uint32_t>(frame.data[5]) << 16) |
-		(static_cast<uint32_t>(frame.data[6]) << 8)  |
-		(static_cast<uint32_t>(frame.data[7]))
-	};
-
-	std::memcpy(&slip_speed, &slip_speed_bits, sizeof(float));
+    std::memcpy(&slip_speed, &frame.data[4], sizeof(float));
 }
 
 inline ActiveMotorChangeCommand::ActiveMotorChangeCommand(const CanFrame& frame) {
-	// Unpack access_key from bytes 0-5 (6 ASCII characters) - MSB first
-	access_key[5] = frame.data[0];  // 'T'
-	access_key[4] = frame.data[1];  // 'O'
-	access_key[3] = frame.data[2];  // 'M'
-	access_key[2] = frame.data[3];  // 'T'
-	access_key[1] = frame.data[4];  // 'C'
-	access_key[0] = frame.data[5];  // 'A'
-
-	// Unpack active_motor from bytes 6-7 (uint16_t) - MSB first  
-	active_motor = static_cast<uint16_t>(
-		(static_cast<uint16_t>(frame.data[6]) << 8) |
-		(static_cast<uint16_t>(frame.data[7]))
-	);
+    // Access key is ASCII, order is just array index
+    access_key[0] = frame.data[0];
+    access_key[1] = frame.data[1];
+    access_key[2] = frame.data[2];
+    access_key[3] = frame.data[3];
+    access_key[4] = frame.data[4];
+    access_key[5] = frame.data[5];
+    
+    std::memcpy(&active_motor, &frame.data[6], sizeof(uint16_t));
 }
 
 // ============================================================================
 // SERIALIZATION FUNCTIONS (Domain Structs -> CAN frames)
 // ============================================================================
 
-/// @brief Pack MotorDriveCommand into CAN frame
-/// @param cmd The command to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each float
 inline CanFrame pack(const MotorDriveCommand& cmd) {
 	CanFrame frame{};
 	frame.id = ID_MOTOR_DRIVE_COMMAND;
-	frame.dlc = 8;  // 4 bytes for velocity + 4 bytes for current percentage
-
-	// Pack motor_velocity_rpm (IEEE 754 32-bit float) - MSB first
-	uint32_t velocity_bits;
-	std::memcpy(&velocity_bits, &cmd.motor_velocity_rpm, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((velocity_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((velocity_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((velocity_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>(velocity_bits & 0xFF);
-
-	// Pack motor_current_percent (IEEE 754 32-bit float) - MSB first
-	uint32_t current_bits;
-	std::memcpy(&current_bits, &cmd.motor_current_percent, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((current_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((current_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((current_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>(current_bits & 0xFF);
-
+	frame.dlc = 8;
+    // Little Endian Copy
+	std::memcpy(&frame.data[0], &cmd.motor_velocity_rpm, sizeof(float));
+	std::memcpy(&frame.data[4], &cmd.motor_current_percent, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack MotorPowerCommand into CAN frame
-/// @param cmd The command to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each float
 inline CanFrame pack(const MotorPowerCommand& cmd) {
 	CanFrame frame{};
 	frame.id = ID_MOTOR_POWER_COMMAND;
-	frame.dlc = 8;  // 4 bytes reserved + 4 bytes for bus current
-
-	// First 4 bytes are reserved (set to zero)
-	frame.data[0] = 0;
-	frame.data[1] = 0;
-	frame.data[2] = 0;
-	frame.data[3] = 0;
-
-	// Pack bus_current (IEEE 754 32-bit float) - MSB first
-	uint32_t current_bits;
-	std::memcpy(&current_bits, &cmd.bus_current, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((current_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((current_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((current_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((current_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memset(frame.data, 0, 4); // Reserved
+	std::memcpy(&frame.data[4], &cmd.bus_current, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack ResetCommand into CAN frame
-/// @param cmd The command to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const ResetCommand& /*cmd*/) {
 	CanFrame frame{};
 	frame.id = ID_RESET_COMMAND;
-	frame.dlc = 0;  // No data for reset command
+	frame.dlc = 0;
 	return frame;
 }
 
-/// @brief Pack IdentificationInformation into CAN frame
-/// @param info The information to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const IdentificationInformation& info) {
 	CanFrame frame{};
 	frame.id = ID_IDENTIFICATION_INFORMATION;
-	frame.dlc = 8;  // 4 bytes for serial number + 4 bytes for prohelion ID
-
-	// Pack prohelion_ID - MSB first
-	frame.data[0] = static_cast<uint8_t>((info.prohelion_ID >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((info.prohelion_ID >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((info.prohelion_ID >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((info.prohelion_ID) & 0xFF);
-
-	// Pack serial_number - MSB first
-	frame.data[4] = static_cast<uint8_t>((info.serial_number >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((info.serial_number >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((info.serial_number >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((info.serial_number) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &info.prohelion_ID, sizeof(uint32_t));
+	std::memcpy(&frame.data[4], &info.serial_number, sizeof(uint32_t));
 	return frame;
 }
 
-/// @brief Pack StatusInformation into CAN frame
-/// @param info The information to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const StatusInformation& info) {
 	CanFrame frame{};
 	frame.id = ID_STATUS_INFORMATION;
-	frame.dlc = 8;  // 2 bytes limit flags + 2 bytes error flags + 2 bytes active motor + 1 byte tx error count + 1 byte rx error count
-
-	// Pack limit_flags - MSB first
-	frame.data[0] = static_cast<uint8_t>((info.limit_flags >> 8) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((info.limit_flags) & 0xFF);
-
-	// Pack error_flags - MSB first
-	frame.data[2] = static_cast<uint8_t>((info.error_flags >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((info.error_flags) & 0xFF);
-
-	// Pack active_motor - MSB first
-	frame.data[4] = static_cast<uint8_t>((info.active_motor >> 8) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((info.active_motor) & 0xFF);
-
-	// Pack transmit_error_count
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &info.limit_flags, sizeof(uint16_t));
+	std::memcpy(&frame.data[2], &info.error_flags, sizeof(uint16_t));
+	std::memcpy(&frame.data[4], &info.active_motor, sizeof(uint16_t));
 	frame.data[6] = info.transmit_error_count;
-
-	// Pack receive_error_count
 	frame.data[7] = info.receive_error_count;
-
 	return frame;
 }
 
-/// @brief Pack BusMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each float
 inline CanFrame pack(const BusMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_BUS_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for voltage + 4 bytes for current
-
-	// Pack bus_voltage (IEEE 754 32-bit float) - MSB first
-	uint32_t voltage_bits;
-	std::memcpy(&voltage_bits, &measurement.bus_voltage, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((voltage_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((voltage_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((voltage_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((voltage_bits) & 0xFF);
-
-	// Pack bus_current (IEEE 754 32-bit float) - MSB first
-	uint32_t current_bits;
-	std::memcpy(&current_bits, &measurement.bus_current, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((current_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((current_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((current_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((current_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.bus_voltage, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.bus_current, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack VelocityMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const VelocityMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_VELOCITY_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for motor velocity + 4 bytes for vehicle velocity
-
-	// Pack motor_velocity_rpm (IEEE 754 32-bit float) - MSB first
-	uint32_t rpm_bits;
-	std::memcpy(&rpm_bits, &measurement.motor_velocity_rpm, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((rpm_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((rpm_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((rpm_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((rpm_bits) & 0xFF);
-
-	// Pack vehicle_velocity (IEEE 754 32-bit float) - MSB first
-	uint32_t velocity_bits;
-	std::memcpy(&velocity_bits, &measurement.vehicle_velocity, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((velocity_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((velocity_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((velocity_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((velocity_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.motor_velocity_rpm, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.vehicle_velocity, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack PhaseCurrentMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const PhaseCurrentMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_PHASE_CURRENT_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for phase B current + 4 bytes for phase C current
-
-	// Pack phase_b_current (IEEE 754 32-bit float) - MSB first
-	uint32_t phase_b_bits;
-	std::memcpy(&phase_b_bits, &measurement.phase_b_current, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((phase_b_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((phase_b_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((phase_b_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((phase_b_bits) & 0xFF);
-
-	// Pack phase_c_current (IEEE 754 32-bit float) - MSB first
-	uint32_t phase_c_bits;
-	std::memcpy(&phase_c_bits, &measurement.phase_c_current, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((phase_c_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((phase_c_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((phase_c_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((phase_c_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.phase_b_current, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.phase_c_current, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack MotorVoltageVectorMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const MotorVoltageVectorMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_MOTOR_VOLTAGE_VECTOR_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for v_q + 4 bytes for v_d
-
-	// Pack v_q (IEEE 754 32-bit float) - MSB first
-	uint32_t v_q_bits;
-	std::memcpy(&v_q_bits, &measurement.v_q, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((v_q_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((v_q_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((v_q_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((v_q_bits) & 0xFF);
-
-	// Pack v_d (IEEE 754 32-bit float) - MSB first
-	uint32_t v_d_bits;
-	std::memcpy(&v_d_bits, &measurement.v_d, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((v_d_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((v_d_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((v_d_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((v_d_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.v_q, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.v_d, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack MotorCurrentVectorMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const MotorCurrentVectorMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_MOTOR_CURRENT_VECTOR_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for i_q + 4 bytes for i_d
-
-	// Pack i_q (IEEE 754 32-bit float) - MSB first
-	uint32_t i_q_bits;
-	std::memcpy(&i_q_bits, &measurement.i_q, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((i_q_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((i_q_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((i_q_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((i_q_bits) & 0xFF);
-
-	// Pack i_d (IEEE 754 32-bit float) - MSB first
-	uint32_t i_d_bits;
-	std::memcpy(&i_d_bits, &measurement.i_d, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((i_d_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((i_d_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((i_d_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((i_d_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.i_q, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.i_d, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack MotorBackEMFMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const MotorBackEMFMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_MOTOR_BACK_EMF_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for BEMf_q + 4 bytes for BEMf_d
-
-	// Pack BEMf_q (IEEE 754 32-bit float) - MSB first
-	uint32_t BEMf_q_bits;
-	std::memcpy(&BEMf_q_bits, &measurement.BEMf_q, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((BEMf_q_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((BEMf_q_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((BEMf_q_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((BEMf_q_bits) & 0xFF);
-
-	// Pack BEMf_d (IEEE 754 32-bit float) - MSB first
-	uint32_t BEMf_d_bits;
-	std::memcpy(&BEMf_d_bits, &measurement.BEMf_d, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((BEMf_d_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((BEMf_d_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((BEMf_d_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((BEMf_d_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.BEMf_q, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.BEMf_d, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack VoltageRailMeasurement15V into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const VoltageRailMeasurement15V& measurement) {
 	CanFrame frame{};
 	frame.id = ID_15V_VOLTAGE_RAIL_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes reserved + 4 bytes for 15V supply
-
-	// First 4 bytes are reserved (set to zero)
-	frame.data[0] = 0;
-	frame.data[1] = 0;
-	frame.data[2] = 0;
-	frame.data[3] = 0;
-
-	// Pack supply_of_15V (IEEE 754 32-bit float) - MSB first
-	uint32_t voltage_bits;
-	std::memcpy(&voltage_bits, &measurement.supply_of_15V, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((voltage_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((voltage_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((voltage_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((voltage_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memset(frame.data, 0, 4);
+	std::memcpy(&frame.data[4], &measurement.supply_of_15V, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack VoltageRailMeasurement3V3And1V9 into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const VoltageRailMeasurement3V3And1V9& measurement) {
 	CanFrame frame{};
 	frame.id = ID_3V3_AND_1V9_VOLTAGE_RAIL_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for 1.9V supply + 4 bytes for 3.3V supply
-
-	// Pack supply_of_1V9 (IEEE 754 32-bit float) - MSB first
-	uint32_t voltage_1v9_bits;
-	std::memcpy(&voltage_1v9_bits, &measurement.supply_of_1V9, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((voltage_1v9_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((voltage_1v9_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((voltage_1v9_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((voltage_1v9_bits) & 0xFF);
-
-	// Pack supply_of_3V3 (IEEE 754 32-bit float) - MSB first
-	uint32_t voltage_3v3_bits;
-	std::memcpy(&voltage_3v3_bits, &measurement.supply_of_3V3, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((voltage_3v3_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((voltage_3v3_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((voltage_3v3_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((voltage_3v3_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.supply_of_1V9, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.supply_of_3V3, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack HeatsinkAndMotorTemperatureMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const HeatsinkAndMotorTemperatureMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_HEATSINK_AND_MOTOR_TEMPERATURE_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for motor temp + 4 bytes for heat sink temp
-
-	// Pack motor_temp (IEEE 754 32-bit float) - MSB first
-	uint32_t motor_temp_bits;
-	std::memcpy(&motor_temp_bits, &measurement.motor_temp, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((motor_temp_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((motor_temp_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((motor_temp_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((motor_temp_bits) & 0xFF);
-
-	// Pack heat_sink_temp (IEEE 754 32-bit float) - MSB first
-	uint32_t heat_sink_temp_bits;
-	std::memcpy(&heat_sink_temp_bits, &measurement.heat_sink_temp, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((heat_sink_temp_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((heat_sink_temp_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((heat_sink_temp_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((heat_sink_temp_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.motor_temp, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.heat_sink_temp, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack DSPBoardTemperatureMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const DSPBoardTemperatureMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_DSP_BOARD_TEMPERATURE_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for DSP board temp + 4 bytes reserved
-
-	// Pack DSP_board_temp (IEEE 754 32-bit float) - MSB first
-	uint32_t dsp_temp_bits;
-	std::memcpy(&dsp_temp_bits, &measurement.DSP_board_temp, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((dsp_temp_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((dsp_temp_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((dsp_temp_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((dsp_temp_bits) & 0xFF);
-
-	// Last 4 bytes are reserved (set to zero)
-	frame.data[4] = 0;
-	frame.data[5] = 0;
-	frame.data[6] = 0;
-	frame.data[7] = 0;
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.DSP_board_temp, sizeof(float));
+	std::memset(&frame.data[4], 0, 4);
 	return frame;
 }
 
-/// @brief Pack OdometerAndBusAmpHoursMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const OdometerAndBusAmpHoursMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_ODOMETER_AND_BUS_AMP_HOURS_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes for odometer + 4 bytes for DC bus amp hours
-
-	// Pack odometer (IEEE 754 32-bit float) - MSB first
-	uint32_t odometer_bits;
-	std::memcpy(&odometer_bits, &measurement.odometer, sizeof(float));
-	frame.data[0] = static_cast<uint8_t>((odometer_bits >> 24) & 0xFF);
-	frame.data[1] = static_cast<uint8_t>((odometer_bits >> 16) & 0xFF);
-	frame.data[2] = static_cast<uint8_t>((odometer_bits >> 8) & 0xFF);
-	frame.data[3] = static_cast<uint8_t>((odometer_bits) & 0xFF);
-
-	// Pack DC_bus_amp_hours (IEEE 754 32-bit float) - MSB first
-	uint32_t amp_hours_bits;
-	std::memcpy(&amp_hours_bits, &measurement.DC_bus_amp_hours, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((amp_hours_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((amp_hours_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((amp_hours_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((amp_hours_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memcpy(&frame.data[0], &measurement.odometer, sizeof(float));
+	std::memcpy(&frame.data[4], &measurement.DC_bus_amp_hours, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack SlipSpeedMeasurement into CAN frame
-/// @param measurement The measurement to serialize
-/// @return CAN frame with packed data low float first then MSB-first byte order within each
 inline CanFrame pack(const SlipSpeedMeasurement& measurement) {
 	CanFrame frame{};
 	frame.id = ID_SLIP_SPEED_MEASUREMENT;
-	frame.dlc = 8;  // 4 bytes reserved + 4 bytes for slip speed
-
-	// First 4 bytes are reserved (set to zero)
-	frame.data[0] = 0;
-	frame.data[1] = 0;
-	frame.data[2] = 0;
-	frame.data[3] = 0;
-
-	// Pack slip_speed (IEEE 754 32-bit float) - MSB first
-	uint32_t slip_speed_bits;
-	std::memcpy(&slip_speed_bits, &measurement.slip_speed, sizeof(float));
-	frame.data[4] = static_cast<uint8_t>((slip_speed_bits >> 24) & 0xFF);
-	frame.data[5] = static_cast<uint8_t>((slip_speed_bits >> 16) & 0xFF);
-	frame.data[6] = static_cast<uint8_t>((slip_speed_bits >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((slip_speed_bits) & 0xFF);
-
+	frame.dlc = 8;
+	std::memset(frame.data, 0, 4);
+	std::memcpy(&frame.data[4], &measurement.slip_speed, sizeof(float));
 	return frame;
 }
 
-/// @brief Pack ActiveMotorChangeCommand into CAN frame
-/// @param cmd The command to serialize
-/// @return CAN frame with packed data - access key first, then MSB first for motor index
 inline CanFrame pack(const ActiveMotorChangeCommand& cmd) {
 	CanFrame frame{};
 	frame.id = ID_ACTIVE_MOTOR_CHANGE;
-	frame.dlc = 8;  // 6 bytes for access_key + 2 bytes for active_motor
-
-	// Pack access_key (6 ASCII bytes) - should be "ACTMOT" - MSB first
-	frame.data[0] = cmd.access_key[5];  // 'T'
-	frame.data[1] = cmd.access_key[4];  // 'O'
-	frame.data[2] = cmd.access_key[3];  // 'M'
-	frame.data[3] = cmd.access_key[2];  // 'T'
-	frame.data[4] = cmd.access_key[1];  // 'C'
-	frame.data[5] = cmd.access_key[0];  // 'A'
-
-	// Pack active_motor (uint16_t) - MSB first
-	frame.data[6] = static_cast<uint8_t>((cmd.active_motor >> 8) & 0xFF);
-	frame.data[7] = static_cast<uint8_t>((cmd.active_motor) & 0xFF);
-
+	frame.dlc = 8;
+	frame.data[0] = cmd.access_key[0];
+	frame.data[1] = cmd.access_key[1];
+	frame.data[2] = cmd.access_key[2];
+	frame.data[3] = cmd.access_key[3];
+	frame.data[4] = cmd.access_key[4];
+	frame.data[5] = cmd.access_key[5];
+	std::memcpy(&frame.data[6], &cmd.active_motor, sizeof(uint16_t));
 	return frame;
 }
 
